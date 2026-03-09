@@ -3,6 +3,7 @@ import time
 import pandas as pd
 from selenium import webdriver
 from selenium.webdriver.common.by import By
+import random
 
 # === ПАРАМЕТРЫ ===
 
@@ -23,8 +24,30 @@ os.makedirs(OUTPUT_FOLDER, exist_ok=True)
 df = pd.read_excel(EXCEL_PATH, sheet_name=SHEET_NAME)
 ids = df[ID_COLUMN].dropna().astype(str).tolist()
 
+
 # Настройка Selenium
 driver = webdriver.Chrome()
+
+
+def wait_for_captcha(driver):
+    html = driver.page_source.lower()
+
+    # признаки капчи (можно расширять)
+    captcha_markers = [
+        "captcha",
+        "g-recaptcha",
+        "hcaptcha",
+        "verify you are human",
+        "проверка что вы не робот"
+    ]
+
+    if any(marker in html for marker in captcha_markers):
+        print("\n⚠️ Обнаружена CAPTCHA.")
+        print("Решите её в браузере.")
+        input("После решения нажмите ENTER для продолжения...")
+
+        # небольшая пауза чтобы страница обновилась
+        time.sleep(2)
 
 # === ОСНОВНОЙ ЦИКЛ ===
 
@@ -34,7 +57,10 @@ for obj_id in ids:
     
     try:
         driver.get(url)
-        time.sleep(1.5)  # Подождать загрузку
+        time.sleep(random.uniform(1.5, 3.5))
+
+        # проверяем капчу
+        wait_for_captcha(driver)
 
         html = driver.page_source
 
