@@ -1,0 +1,49 @@
+ File "C:\Users\shidlovskiyaf\projects\domrfparse\cards_selenium_1.py", line 29, in <module>
+    driver = webdriver.Chrome()
+  File "C:\Users\shidlovskiyaf\projects\domrfparse\venv\Lib\site-packages\selenium\webdriver\chrome\webdriver.py", line 45, in __init__
+    super().__init__(
+    ~~~~~~~~~~~~~~~~^
+        browser_name=DesiredCapabilities.CHROME["browserName"],
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<3 lines>...
+        keep_alive=keep_alive,
+        ^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "C:\Users\shidlovskiyaf\projects\domrfparse\venv\Lib\site-packages\selenium\webdriver\chromium\webdriver.py", line 55, in __init__
+    self.service.start()
+    ~~~~~~~~~~~~~~~~~~^^
+  File "C:\Users\shidlovskiyaf\projects\domrfparse\venv\Lib\site-packages\selenium\webdriver\common\service.py", line 106, in start
+    self._start_process(self._path)
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+  File "C:\Users\shidlovskiyaf\projects\domrfparse\venv\Lib\site-packages\selenium\webdriver\common\service.py", line 221, in _start_process
+    self.process = subprocess.Popen(
+                   ~~~~~~~~~~~~~~~~^
+        cmd,
+        ^^^^
+    ...<7 lines>...
+        **self.popen_kw,
+        ^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "C:\Program Files\Python\Lib\subprocess.py", line 1039, in __init__
+    self._execute_child(args, executable, preexec_fn, close_fds,
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                        pass_fds, cwd, env,
+                        ^^^^^^^^^^^^^^^^^^^
+    ...<5 lines>...
+                        gid, gids, uid, umask,
+                        ^^^^^^^^^^^^^^^^^^^^^^
+                        start_new_session, process_group)
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Program Files\Python\Lib\subprocess.py", line 1551, in _execute_child
+    hp, ht, pid, tid = _winapi.CreateProcess(executable, args,
+                       ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^
+                             # no special security
+                             ^^^^^^^^^^^^^^^^^^^^^
+    ...<4 lines>...
+                             cwd,
+                             ^^^^
+                             startupinfo)
+                             ^^^^^^^^^^^^
+OSError: [WinError 1260] Эта программа заблокирована групповой политикой. За дополнительными сведениями обращайтесь к системному администратору
