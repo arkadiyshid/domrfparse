@@ -68,7 +68,7 @@ for obj_id in ids:
     
     try:
         driver.get(url)
-        time.sleep(random.uniform(1.5, 3.5))
+        time.sleep(random.uniform(1.0, 2.0))
 
         # проверяем капчу
         wait_for_captcha(driver)
