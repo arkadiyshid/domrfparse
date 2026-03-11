@@ -4,6 +4,11 @@ import pandas as pd
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 import random
+from selenium.webdriver.chrome.service import Service
+
+# Ваш путь к chromedriver
+CHROMEDRIVER_PATH = 'chromedriver.exe'
+
 
 # === ПАРАМЕТРЫ ===
 
@@ -26,7 +31,13 @@ ids = df[ID_COLUMN].dropna().astype(str).tolist()
 
 
 # Настройка Selenium
-driver = webdriver.Chrome()
+if os.name == 'nt':
+    # Для Windows – явно указываем путь, под который разрешение может получить админ
+    service = Service(CHROMEDRIVER_PATH)
+    driver = webdriver.Chrome(service=service)
+else:
+    # На других ОС можно использовать автопоиск
+    driver = webdriver.Chrome()
 
 
 def wait_for_captcha(driver):
