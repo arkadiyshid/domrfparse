@@ -18,7 +18,7 @@ DETAIL_ENDPOINT = (
 
 MAP_REQUEST_BODY = {
     "districtCodes": [],
-    "types": ["Technopark"],
+    "types": ["TechnoparkRoom"],
 }
 
 MAP_FILE = Path("промышленные_кластеры\map.json")

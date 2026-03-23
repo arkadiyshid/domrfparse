@@ -22,3 +22,5 @@ venv/
 *data/
 # Игнорирровать папки с данными
 *map.json
+*.geojson
+*projects.json
