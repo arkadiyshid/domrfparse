@@ -4,18 +4,20 @@ import pandas as pd
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.chrome.service import Service
 
-
+# Ваш путь к chromedriver
+CHROMEDRIVER_PATH = 'chromedriver.exe'
 options = Options()
 # options.add_argument("--headless=new")  # Активирует Headless-режим
 # options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64)")
 
 # === ПАРАМЕТРЫ ===
 
-EXCEL_PATH = os.path.expanduser("~/Desktop/domrf.xlsx")  # Путь к Excel-файлу
+EXCEL_PATH = "domrf.xlsx"  # Путь к Excel-файлу
 SHEET_NAME = "sheet1"                                  # Имя листа
 ID_COLUMN = "ID"                                       # Название столбца с ID объектов
-OUTPUT_FOLDER = os.path.expanduser("~/Desktop/json_land")  # Куда сохранять JSON-файлы
+OUTPUT_FOLDER = "json_land"  # Куда сохранять JSON-файлы
 BASE_URL = "https://xn--80az8a.xn--d1aqf.xn--p1ai/%D1%81%D0%B5%D1%80%D0%B2%D0%B8%D1%81%D1%8B/%D0%BF%D1%80%D0%BE%D0%B2%D0%B5%D1%80%D0%BA%D0%B0_%D0%BD%D0%BE%D0%B2%D0%BE%D1%81%D1%82%D1%80%D0%BE%D0%B5%D0%BA/"
 
 # === ПОДГОТОВКА ===
@@ -28,7 +30,13 @@ df = pd.read_excel(EXCEL_PATH, sheet_name=SHEET_NAME)
 ids = df[ID_COLUMN].dropna().astype(str).tolist()
 
 # Настройка Selenium
-driver = webdriver.Chrome(options=options)
+if os.name == 'nt':
+    # Для Windows – явно указываем путь, под который разрешение может получить админ
+    service = Service(CHROMEDRIVER_PATH)
+    driver = webdriver.Chrome(service=service)
+else:
+    # На других ОС можно использовать автопоиск
+    driver = webdriver.Chrome()
 
 # === ОСНОВНОЙ ЦИКЛ ===
 
