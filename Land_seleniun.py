@@ -51,7 +51,7 @@ for obj_id in ids:
         html = driver.page_source
 
         # Извлекаем JSON из HTML
-        start_marker = 'json">'
+        start_marker = '/json">'
         end_marker = '</script>'
         start_index = html.find(start_marker)
         end_index = html.find(end_marker, start_index)
