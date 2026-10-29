@@ -31,7 +31,7 @@ BASE_URL = "https://xn--80az8a.xn--d1aqf.xn--p1ai/сервисы/проверк�
 def extract_land_json(html: str) -> str | None:
     """Как в Land_seleniun.py: первый <script ... json"> … </script>.
     Плюс проверка, что это валидный JSON; запасной вариант — __NEXT_DATA__."""
-    start = html.find('json">')
+    start = html.find('/json">')
     if start != -1:
         end = html.find("</script>", start)
         if end != -1:
