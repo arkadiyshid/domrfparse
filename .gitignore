@@ -25,3 +25,10 @@ venv/
 *.geojson
 *projects.json
 *.json
+# Сессия сайта (cookies) — не публиковать!
+curl.txt
+# Логи запусков cards_curl.py / land_curl.py
+logs/
+__pycache__/
+.pytest_cache/
+chrome_profile/
