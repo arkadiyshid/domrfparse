@@ -239,3 +239,78 @@ def test_cookie_values_not_logged_and_ids_file(server, tmp_path):
     assert "spid" in text and "1730198412_abc" not in text  # имя cookie есть, значения нет
     assert set(read_report(run_dir)) == {"24248", "26466"}
     assert (run_dir / "failed_ids.txt").read_text() == ""
+
+
+# ---------- корпоративный прокси со своим сертификатом ----------
+
+import shutil  # noqa: E402
+import ssl  # noqa: E402
+import subprocess  # noqa: E402
+
+
+@pytest.fixture(scope="module")
+def corp_https(tmp_path_factory):
+    """HTTPS-сервер с сертификатом от «корпоративного» корневого центра,
+    которого нет в стандартном наборе — как на рабочем ноутбуке."""
+    if not shutil.which("openssl"):
+        pytest.skip("нет openssl")
+    d = tmp_path_factory.mktemp("pki")
+    run = lambda *a: subprocess.run(a, cwd=d, check=True, capture_output=True)  # noqa: E731
+    run("openssl", "req", "-x509", "-newkey", "rsa:2048", "-nodes", "-days", "2",
+        "-keyout", "ca.key", "-out", "ca.pem", "-subj", "/CN=Corp Proxy Root CA")
+    run("openssl", "req", "-newkey", "rsa:2048", "-nodes", "-keyout", "srv.key",
+        "-out", "srv.csr", "-subj", "/CN=127.0.0.1")
+    (d / "ext.cnf").write_text("subjectAltName=IP:127.0.0.1\n")
+    run("openssl", "x509", "-req", "-in", "srv.csr", "-CA", "ca.pem", "-CAkey", "ca.key",
+        "-CAcreateserial", "-out", "srv.pem", "-days", "2", "-extfile", "ext.cnf")
+    srv = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+    ctx.load_cert_chain(d / "srv.pem", d / "srv.key")
+    srv.socket = ctx.wrap_socket(srv.socket, server_side=True)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    yield f"https://127.0.0.1:{srv.server_address[1]}{OBJ_PATH}", d / "ca.pem"
+    srv.shutdown()
+
+
+def corp_args(tmp_path, url, *extra):
+    (tmp_path / "curl.txt").write_text(CURL_SAMPLE, encoding="utf-8")
+    return ["--log-dir", str(tmp_path / "logs"), "--curl-file", str(tmp_path / "curl.txt"),
+            "--out", str(tmp_path / "out"), "--base-url", url, "--ids", "1", "2", "3", *extra]
+
+
+def test_cert_error_stops_at_once_with_hint(corp_https, tmp_path):
+    url, _ = corp_https
+    Handler.seen.clear()
+    code = cc.main(corp_args(tmp_path, url, "--system-certs", "off"))
+    assert code == 3
+    run_dir = next((tmp_path / "logs").iterdir())
+    text = (run_dir / "run.log").read_text(encoding="utf-8")
+    assert "повтор" not in text  # без бессмысленных повторов
+    assert "--ca" in text  # подсказка, что делать
+    assert (run_dir / "failed_ids.txt").read_text().split() == ["1", "2", "3"]
+
+
+def test_explicit_ca_works(corp_https, tmp_path):
+    url, ca = corp_https
+    assert cc.main(corp_args(tmp_path, url, "--ca", str(ca))) == 0
+    assert sorted(p.name for p in (tmp_path / "out").iterdir()) == ["1.txt", "2.txt", "3.txt"]
+
+
+def test_windows_store_used_automatically(corp_https, tmp_path, monkeypatch):
+    """Имитация Windows: корневой сертификат компании лежит в хранилище ROOT."""
+    url, ca = corp_https
+    der = ssl.PEM_cert_to_DER_cert(ca.read_text())
+    calls = []
+
+    def fake_enum(store):
+        calls.append(store)
+        return [(der, "x509_asn", True)] if store == "ROOT" else []
+
+    monkeypatch.setattr(ssl, "enum_certificates", fake_enum, raising=False)
+    monkeypatch.setattr(cc.sys, "platform", "win32")
+    assert cc.main(corp_args(tmp_path, url)) == 0  # без --ca, всё само
+    assert calls == ["ROOT", "CA"]
+    run_dir = next((tmp_path / "logs").iterdir())
+    bundle = (run_dir / "ca_bundle.pem").read_text()
+    assert ca.read_text().strip().splitlines()[1] in bundle  # наш корневой внутри
+    assert bundle.count("BEGIN CERTIFICATE") > 50  # и стандартные certifi на месте

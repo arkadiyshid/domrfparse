@@ -33,8 +33,10 @@
 Если «Доступ заблокирован» — cookies протухли или привязаны к чему-то ещё:
 обновите страницу в Chrome, заново скопируйте cURL в curl.txt, повторите.
 
-Корпоративная сеть с подменой сертификатов (CERTIFICATE_VERIFY_FAILED):
-  python cards_curl.py --ca путь\\к\\корпоративному_сертификату.pem
+Корпоративная сеть с подменой сертификатов (CERTIFICATE_VERIFY_FAILED, curl: (60)):
+  на Windows скрипт сам добавляет сертификаты из хранилища Windows (там лежит
+  корневой сертификат компании). Если не помогло — укажите его явно:
+  python cards_curl.py --ca путь\\к\\корпоративному_сертификату.cer
 """
 
 from __future__ import annotations
@@ -248,6 +250,55 @@ class Report:
 
 # === сбор ===
 
+def system_ca_bundle(dest_dir: Path) -> str | None:
+    """Собирает файл сертификатов: стандартные (certifi) + сертификаты из системного
+    хранилища. На корпоративном Windows там лежит корневой сертификат компании,
+    которым прокси подписывает HTTPS — Chrome ему доверяет, а curl_cffi без этого нет."""
+    import ssl
+    pems, n_sys = [], 0
+    if sys.platform == "win32":
+        for store in ("ROOT", "CA"):
+            try:
+                for cert, encoding, _trust in ssl.enum_certificates(store):
+                    if encoding == "x509_asn":
+                        pems.append(ssl.DER_cert_to_PEM_cert(cert))
+                        n_sys += 1
+            except Exception as e:
+                log.debug("Хранилище Windows %s не прочиталось: %s", store, e)
+    elif sys.platform == "darwin":
+        import subprocess
+        for kc in ("/Library/Keychains/System.keychain",
+                   "/System/Library/Keychains/SystemRootCertificates.keychain"):
+            r = subprocess.run(["security", "find-certificate", "-a", "-p", kc],
+                               capture_output=True, text=True)
+            if r.returncode == 0 and "BEGIN CERTIFICATE" in r.stdout:
+                pems.append(r.stdout)
+                n_sys += r.stdout.count("BEGIN CERTIFICATE")
+    if not n_sys:
+        return None
+    try:
+        import certifi
+        pems.insert(0, Path(certifi.where()).read_text(encoding="utf-8"))
+    except Exception:
+        pass
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    path = dest_dir / "ca_bundle.pem"
+    path.write_text("\n".join(pems), encoding="utf-8")
+    log.info("🔐 Сертификаты: стандартные + %d из системного хранилища (%s)", n_sys, path)
+    return str(path)
+
+
+def is_cert_error(e: Exception) -> bool:
+    text = f"{type(e).__name__} {e}"
+    return "Certificate" in text or "certificate" in text or "curl: (60)" in text
+
+
+CERT_HINT = ("Ошибка сертификата: HTTPS проверяет корпоративный прокси со своим сертификатом. "
+             "Скрипт пробует взять его из хранилища Windows автоматически; если не вышло — "
+             "выгрузите корневой сертификат компании (Chrome → замок у адреса → Сертификат → "
+             "Путь сертификации → верхний → Экспорт, Base64 .cer) и запустите с --ca путь\\к\\файлу.cer")
+
+
 def make_session(headers: dict, cookies: dict, ca: str | None = None, impersonate=IMPERSONATE):
     from curl_cffi import requests as creq
 
@@ -266,7 +317,7 @@ def fetch(session, url: str, headers: dict, obj_id: str, retries: int, sleep):
         try:
             r = session.get(url, headers=headers)
         except Exception as e:
-            if attempt > retries:
+            if attempt > retries or is_cert_error(e):  # сертификат повтором не починить
                 raise
             wait = RETRY_BACKOFF * attempt
             log.warning("ID %s: сетевая ошибка (попытка %d/%d): %s: %s — повтор через %.0f с",
@@ -348,6 +399,10 @@ def scrape(session, ids, out_dir: Path, base_url=BASE_URL, force=False,
                 row.update(status="error", error=f"{type(e).__name__}: {e}", file=saved_html)
                 log.error("❌ ID %s: %s: %s", obj_id, type(e).__name__, e)
                 log.debug("Traceback для ID %s:", obj_id, exc_info=True)
+                if is_cert_error(e):
+                    log.error("🔐 %s", CERT_HINT)
+                    stats["cert_error"] = True
+                    break  # все остальные ID упадут так же
             finally:
                 row["seconds"] = round(time.monotonic() - t0, 2)
                 if "status" in row:
@@ -391,7 +446,9 @@ def run(argv=None, *, name="cards", doc=__doc__, out=None, base_url=BASE_URL,
     ap.add_argument("--excel", default=str(EXCEL_PATH))
     ap.add_argument("--out", default=str(out or OUTPUT_FOLDER))
     ap.add_argument("--base-url", default=base_url)
-    ap.add_argument("--ca", help="корпоративный корневой сертификат (.pem)")
+    ap.add_argument("--ca", help="корпоративный корневой сертификат (.pem/.cer в Base64)")
+    ap.add_argument("--system-certs", choices=["auto", "on", "off"], default="auto",
+                    help="брать сертификаты из хранилища ОС (auto = только на Windows)")
     ap.add_argument("--impersonate", default=IMPERSONATE)
     ap.add_argument("--log-dir", default=str(LOG_DIR))
     ap.add_argument("--retries", type=int, default=RETRIES)
@@ -431,19 +488,31 @@ def run(argv=None, *, name="cards", doc=__doc__, out=None, base_url=BASE_URL,
     ids = [i for i in ids if i][: args.limit or None]
     log.info("Всего ID: %d → %s", len(ids), args.out)
 
-    session = make_session(headers, cookies, ca=args.ca, impersonate=args.impersonate)
+    ca = args.ca
+    if ca:
+        log.info("🔐 Сертификаты из --ca: %s", ca)
+    elif args.system_certs == "on" or (args.system_certs == "auto" and sys.platform == "win32"):
+        ca = system_ca_bundle(run_dir)
+        if not ca:
+            log.warning("Не удалось прочитать системные сертификаты — используются стандартные.")
+    session = make_session(headers, cookies, ca=ca, impersonate=args.impersonate)
     stats = scrape(session, ids, Path(args.out), base_url=args.base_url, force=args.force,
                    extractor=extractor, classifier=classifier, run_dir=run_dir, retries=args.retries)
 
     failed = stats["failed_ids"]
-    log.info("🎉 Готово за %.0f с: сохранено %d, пропущено (уже было) %d, без JSON %d, ошибок %d%s%s",
-             stats["elapsed"], stats["saved"], stats["skipped"], stats["no_json"], stats["errors"],
-             ", ОСТАНОВЛЕНО: сайт не пустил" if stats["blocked"] else "",
-             ", ПРЕРВАНО" if stats.get("interrupted") else "")
+    flags = "".join([
+        ", ОСТАНОВЛЕНО: сайт не пустил" if stats["blocked"] else "",
+        ", ОСТАНОВЛЕНО: ошибка сертификата" if stats.get("cert_error") else "",
+        ", ПРЕРВАНО" if stats.get("interrupted") else "",
+    ])
+    log.info("🎉 Готово за %.0f с: сохранено %d, пропущено (уже было) %d, без JSON %d, ошибок %d%s",
+             stats["elapsed"], stats["saved"], stats["skipped"], stats["no_json"], stats["errors"], flags)
     log.info("Отчёт: %s", run_dir / "report.csv")
     if failed:
         log.info("Не скачано %d ID. Перезапустить только их:\n  python %s.py --ids-file \"%s\"",
                  len(failed), Path(sys.argv[0]).stem or name, run_dir / "failed_ids.txt")
+    if stats.get("cert_error"):
+        return 3
     return 2 if stats["blocked"] else (130 if stats.get("interrupted") else 0)
 
 
