@@ -63,9 +63,9 @@ CURL_FILE = HERE / "curl.txt"
 BASE_URL = "https://xn--80az8a.xn--d1aqf.xn--p1ai/сервисы/каталог-новостроек/объект/"
 IMPERSONATE = "chrome"          # последний поддерживаемый профиль Chrome в curl_cffi
 
-DELAY_RANGE = (0.5, 2.1)        # пауза между объектами, сек
-LONG_PAUSE_EVERY = 20
-LONG_PAUSE_RANGE = (3.0, 7.0)
+DELAY_RANGE = (1.5, 3.4)        # пауза между объектами, сек
+LONG_PAUSE_EVERY = 7
+LONG_PAUSE_RANGE = (5.0, 10.0)
 TIMEOUT = 30
 
 BLOCK_MARKERS = ["доступ заблокирован", "access denied", "доступ к запрашиваемому ресурсу"]
